@@ -1,0 +1,76 @@
+@host = http://localhost:5080
+
+### Create order webhook
+POST {{host}}/api/webhooks/orders
+Content-Type: application/json
+X-Idempotency-Key: evt_01HXYZ
+
+{
+  "eventId": "evt_01HXYZ",
+  "eventType": "order.created",
+  "occurredAt": "2026-07-27T18:00:00Z",
+  "data": {
+    "orderId": "ord_123",
+    "status": "pending",
+    "totalAmount": 150.90,
+    "currency": "BRL",
+    "customer": {
+      "externalId": "cust_456",
+      "name": "Ana Silva",
+      "email": "ana@email.com",
+      "document": "12345678901"
+    }
+  }
+}
+
+### Update order webhook
+POST {{host}}/api/webhooks/orders
+Content-Type: application/json
+
+{
+  "eventId": "evt_01HXYZ_UPD",
+  "eventType": "order.updated",
+  "occurredAt": "2026-07-27T18:10:00Z",
+  "data": {
+    "orderId": "ord_123",
+    "status": "confirmed",
+    "totalAmount": 150.90,
+    "currency": "BRL",
+    "customer": {
+      "externalId": "cust_456",
+      "name": "Ana Silva",
+      "email": "ana@email.com",
+      "document": "12345678901"
+    }
+  }
+}
+
+### Cancel order webhook
+POST {{host}}/api/webhooks/orders
+Content-Type: application/json
+
+{
+  "eventId": "evt_01HXYZ_CANCEL",
+  "eventType": "order.canceled",
+  "occurredAt": "2026-07-27T18:20:00Z",
+  "data": {
+    "orderId": "ord_123",
+    "totalAmount": 150.90,
+    "currency": "BRL",
+    "customer": {
+      "externalId": "cust_456",
+      "name": "Ana Silva",
+      "email": "ana@email.com",
+      "document": "12345678901"
+    }
+  }
+}
+
+### List events
+GET {{host}}/api/events
+
+### Get order projection
+GET {{host}}/api/orders/ord_123
+
+### Metrics
+GET {{host}}/api/metrics

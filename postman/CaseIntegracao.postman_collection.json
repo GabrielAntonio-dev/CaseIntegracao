@@ -1,0 +1,72 @@
+{
+  "info": {
+    "name": "Case Integração — Pedidos CRM",
+    "description": "Simula disparo de webhooks e consulta estado da integração.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5080" }
+  ],
+  "item": [
+    {
+      "name": "Webhook order.created",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Idempotency-Key", "value": "evt_01HXYZ" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"eventId\": \"evt_01HXYZ\",\n  \"eventType\": \"order.created\",\n  \"occurredAt\": \"2026-07-27T18:00:00Z\",\n  \"data\": {\n    \"orderId\": \"ord_123\",\n    \"status\": \"pending\",\n    \"totalAmount\": 150.90,\n    \"currency\": \"BRL\",\n    \"customer\": {\n      \"externalId\": \"cust_456\",\n      \"name\": \"Ana Silva\",\n      \"email\": \"ana@email.com\",\n      \"document\": \"12345678901\"\n    }\n  }\n}"
+        },
+        "url": "{{baseUrl}}/api/webhooks/orders"
+      }
+    },
+    {
+      "name": "Webhook order.updated",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"eventId\": \"evt_01HXYZ_UPD\",\n  \"eventType\": \"order.updated\",\n  \"occurredAt\": \"2026-07-27T18:10:00Z\",\n  \"data\": {\n    \"orderId\": \"ord_123\",\n    \"status\": \"confirmed\",\n    \"totalAmount\": 200.00,\n    \"currency\": \"BRL\",\n    \"customer\": {\n      \"externalId\": \"cust_456\",\n      \"name\": \"Ana Silva\",\n      \"email\": \"ana@email.com\",\n      \"document\": \"12345678901\"\n    }\n  }\n}"
+        },
+        "url": "{{baseUrl}}/api/webhooks/orders"
+      }
+    },
+    {
+      "name": "Webhook order.canceled",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"eventId\": \"evt_01HXYZ_CANCEL\",\n  \"eventType\": \"order.canceled\",\n  \"occurredAt\": \"2026-07-27T18:20:00Z\",\n  \"data\": {\n    \"orderId\": \"ord_123\",\n    \"totalAmount\": 200.00,\n    \"currency\": \"BRL\",\n    \"customer\": {\n      \"externalId\": \"cust_456\",\n      \"name\": \"Ana Silva\",\n      \"email\": \"ana@email.com\",\n      \"document\": \"12345678901\"\n    }\n  }\n}"
+        },
+        "url": "{{baseUrl}}/api/webhooks/orders"
+      }
+    },
+    {
+      "name": "List events",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/events"
+      }
+    },
+    {
+      "name": "Get order projection",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/orders/ord_123"
+      }
+    },
+    {
+      "name": "Metrics",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/metrics"
+      }
+    }
+  ]
+}
