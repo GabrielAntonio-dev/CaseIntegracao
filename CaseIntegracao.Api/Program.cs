@@ -1,16 +1,12 @@
 using CaseIntegracao.Api.Workers;
-using CaseIntegracao.Application.Options;
-using CaseIntegracao.Application.Services;
-using CaseIntegracao.Infrastructure;
+using CaseIntegracao.Core;
+using CaseIntegracao.Core.Options;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<RetryOptions>(builder.Configuration.GetSection(RetryOptions.SectionName));
-builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.ContentRootPath);
-
-builder.Services.AddScoped<EventoPedidoProcessor>();
-builder.Services.AddScoped<ConsultaEventosService>();
+builder.Services.AddCore(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddHostedService<RetryBackgroundService>();
 
 builder.Services.AddControllers();

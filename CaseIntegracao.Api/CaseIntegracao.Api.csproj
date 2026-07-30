@@ -12,9 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CaseIntegracao.Application\CaseIntegracao.Application.csproj" />
-    <ProjectReference Include="..\CaseIntegracao.Infrastructure\CaseIntegracao.Infrastructure.csproj" />
-    <ProjectReference Include="..\CaseIntegracao.Domain\CaseIntegracao.Domain.csproj" />
+    <ProjectReference Include="..\CaseIntegracao.Core\CaseIntegracao.Core.csproj" />
   </ItemGroup>
 
 </Project>

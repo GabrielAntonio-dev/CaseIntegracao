@@ -120,19 +120,17 @@ Exemplos HTTP: `[CaseIntegracao.Api/CaseIntegracao.Api.http](CaseIntegracao.Api/
 
 ## Decisões de arquitetura (e por quê)
 
-### Organização em camadas (DDD + SOLID)
+### Organização (Api + Core)
 
 
-| Projeto                         | Responsabilidade                                                  |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `CaseIntegracao.Domain`         | Entidades, enums, políticas e portas (`ICrmClient`, repositories) |
-| `CaseIntegracao.Application`    | Casos de uso (`EventoPedidoProcessor`, `ConsultaEventosService`)  |
-| `CaseIntegracao.Infrastructure` | Arquivo JSON, `CrmHttpClient`, Polly, métricas                    |
-| `CaseIntegracao.Api`            | Controllers, Swagger, CRM mock, `RetryBackgroundService`          |
-| `CaseIntegracao.Tests`          | Testes de idempotência, ordenação e retry                         |
+| Projeto                | Responsabilidade                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `CaseIntegracao.Core`  | Domínio, casos de uso, persistência JSON, `CrmHttpClient`, Polly e métricas     |
+| `CaseIntegracao.Api`   | Controllers, Swagger, CRM mock, `RetryBackgroundService`                         |
+| `CaseIntegracao.Tests` | Testes de idempotência, ordenação e retry                                        |
 
 
-Isso separa regra de negócio de transporte/persistência e facilita testar o processador sem HTTP real.
+Dois projetos deixam o case mais enxuto, ainda com separação entre HTTP e regras/infra.
 
 ### Persistência em arquivo
 

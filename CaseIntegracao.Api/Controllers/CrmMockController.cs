@@ -1,4 +1,4 @@
-using CaseIntegracao.Infrastructure.Crm;
+using CaseIntegracao.Core.Crm;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CaseIntegracao.Api.Controllers;
