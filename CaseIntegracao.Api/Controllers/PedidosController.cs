@@ -1,5 +1,5 @@
-using CaseIntegracao.Core.DTOs;
-using CaseIntegracao.Core.Services;
+using CaseIntegracao.Core.Application.DTOs;
+using CaseIntegracao.Core.Application.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CaseIntegracao.Api.Controllers;

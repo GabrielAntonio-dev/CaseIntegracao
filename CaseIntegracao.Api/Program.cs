@@ -1,6 +1,6 @@
 using CaseIntegracao.Api.Workers;
 using CaseIntegracao.Core;
-using CaseIntegracao.Core.Options;
+using CaseIntegracao.Core.Application.Options;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);

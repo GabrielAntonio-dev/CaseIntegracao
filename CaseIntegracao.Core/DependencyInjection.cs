@@ -1,9 +1,9 @@
-using CaseIntegracao.Core.Crm;
-using CaseIntegracao.Core.Entities;
-using CaseIntegracao.Core.Interfaces;
-using CaseIntegracao.Core.Metrics;
-using CaseIntegracao.Core.Persistence;
-using CaseIntegracao.Core.Services;
+using CaseIntegracao.Core.Application.Services;
+using CaseIntegracao.Core.Domain.Entities;
+using CaseIntegracao.Core.Domain.Interfaces;
+using CaseIntegracao.Core.Infrastructure.Crm;
+using CaseIntegracao.Core.Infrastructure.Metrics;
+using CaseIntegracao.Core.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Polly;

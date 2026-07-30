@@ -1,5 +1,5 @@
-using CaseIntegracao.Core.Services;
-using CaseIntegracao.Core.Interfaces;
+using CaseIntegracao.Core.Application.Services;
+using CaseIntegracao.Core.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CaseIntegracao.Api.Controllers;

@@ -1,5 +1,5 @@
-using CaseIntegracao.Core.Options;
-using CaseIntegracao.Core.Services;
+using CaseIntegracao.Core.Application.Options;
+using CaseIntegracao.Core.Application.Services;
 using Microsoft.Extensions.Options;
 
 namespace CaseIntegracao.Api.Workers;

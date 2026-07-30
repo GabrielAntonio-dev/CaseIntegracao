@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Documentação Técnica — Case Integração Pedidos → CRM</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 0;
+    }
+    h1 { font-size: 22pt; margin: 0 0 8px; color: #0f172a; }
+    h2 {
+      font-size: 14pt;
+      margin: 28px 0 10px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #1e3a5f;
+      color: #1e3a5f;
+      page-break-after: avoid;
+    }
+    h3 { font-size: 12pt; margin: 18px 0 8px; color: #243b53; page-break-after: avoid; }
+    h4 { font-size: 11pt; margin: 14px 0 6px; color: #334e68; }
+    p { margin: 0 0 10px; }
+    ul, ol { margin: 0 0 12px; padding-left: 22px; }
+    li { margin-bottom: 4px; }
+    .subtitle { color: #486581; font-size: 12pt; margin-bottom: 4px; }
+    .meta { color: #627d98; font-size: 10pt; margin-bottom: 24px; }
+    .cover {
+      border-left: 6px solid #1e3a5f;
+      padding: 8px 0 8px 16px;
+      margin-bottom: 28px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 14px;
+      font-size: 10pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #bcccdc;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f0f4f8; color: #102a43; }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9.5pt;
+      background: #f5f7fa;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    pre {
+      background: #f5f7fa;
+      border: 1px solid #d9e2ec;
+      border-radius: 4px;
+      padding: 10px 12px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9pt;
+      overflow-x: auto;
+      page-break-inside: avoid;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .box {
+      background: #f0f4f8;
+      border: 1px solid #d9e2ec;
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin: 0 0 14px;
+      page-break-inside: avoid;
+    }
+    .flow {
+      font-family: Consolas, monospace;
+      font-size: 9.5pt;
+      background: #102a43;
+      color: #f0f4f8;
+      padding: 12px 14px;
+      border-radius: 4px;
+      white-space: pre;
+      line-height: 1.35;
+      page-break-inside: avoid;
+    }
+    .muted { color: #627d98; }
+    .pagebreak { page-break-before: always; }
+  </style>
+</head>
+<body>
+
+  <div class="cover">
+    <h1>Documentação Técnica</h1>
+    <p class="subtitle">Case Integração — Sistema de Pedidos → CRM</p>
+    <p class="meta">
+      Projeto: CaseIntegracao · Stack: C# / ASP.NET Core (.NET 9)<br />
+      Estrutura: Api + Core + Tests · Persistência: arquivo JSON<br />
+      Documento complementar ao README (visão aprofundada)
+    </p>
+  </div>
+
+  <h2>1. Objetivo e contexto</h2>
+  <p>
+    O serviço atua como <strong>integrador</strong> entre dois sistemas:
+  </p>
+  <ul>
+    <li><strong>Sistema de Pedidos</strong> — dispara webhooks quando um pedido é criado, atualizado ou cancelado.</li>
+    <li><strong>CRM</strong> — mantém clientes e pedidos via API REST (neste projeto, um mock embutido no mesmo host).</li>
+  </ul>
+  <p>
+    O integrador recebe o evento, garante o cliente no CRM, sincroniza o pedido e trata problemas típicos de integração:
+    <strong>eventos fora de ordem</strong>, <strong>falhas temporárias</strong> na API de destino e <strong>reenvios duplicados</strong>.
+  </p>
+
+  <h2>2. Escopo funcional</h2>
+  <ol>
+    <li>Endpoint HTTP para receber o webhook do sistema de pedidos.</li>
+    <li>Se o cliente não existir no CRM, criá-lo antes de sincronizar o pedido.</li>
+    <li>Criar ou atualizar o pedido no CRM conforme o tipo de evento.</li>
+    <li>Idempotência por <code>eventId</code>.</li>
+    <li>Ordenação por <code>occurredAt</code> (estado final = mais recente).</li>
+    <li>Retry sensato em falhas 5xx, 429 e timeout, sem perder o evento.</li>
+  </ol>
+  <p><strong>Diferenciais mantidos:</strong> exponential backoff, circuit breaker (Polly), métricas de sincronização e reflexão sobre escala com fila.</p>
+
+  <h2>3. Arquitetura da solução</h2>
+  <h3>3.1 Estrutura de projetos (Api + Core)</h3>
+  <table>
+    <thead>
+      <tr><th>Projeto</th><th>Papel</th><th>Conteúdo principal</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>CaseIntegracao.Api</code></td>
+        <td>Entrada HTTP, Swagger, mock CRM, worker</td>
+        <td>Controllers, <code>RetryBackgroundService</code>, <code>Program.cs</code></td>
+      </tr>
+      <tr>
+        <td><code>CaseIntegracao.Core</code></td>
+        <td>Um csproj com camadas internas</td>
+        <td><code>Domain/</code>, <code>Application/</code>, <code>Infrastructure/</code>, DI</td>
+      </tr>
+      <tr>
+        <td><code>CaseIntegracao.Tests</code></td>
+        <td>Testes automatizados</td>
+        <td>Idempotência, ordenação, cancelamento, retry</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Dois projetos na solution; dentro do Core as pastas deixam explícito o que é domínio, aplicação e infraestrutura
+    (Clean Architecture leve, sem vários .csproj).
+  </p>
+
+  <h3>3.2 Pastas internas do Core</h3>
+  <table>
+    <thead><tr><th>Pasta</th><th>Responsabilidade</th></tr></thead>
+    <tbody>
+      <tr><td><code>Domain/Entities</code></td><td><code>EventoIntegracao</code>, <code>ProjecaoPedido</code>, <code>DadosCliente</code></td></tr>
+      <tr><td><code>Domain/Enums</code></td><td>Tipos de evento, status de pedido e de processamento</td></tr>
+      <tr><td><code>Domain/Interfaces</code></td><td>Portas: repositories, <code>ICrmClient</code>, <code>IMetricasCollector</code></td></tr>
+      <tr><td><code>Domain/Services</code></td><td><code>PoliticaOrdenacaoEventos</code></td></tr>
+      <tr><td><code>Application/Services</code></td><td><code>EventoPedidoProcessor</code>, <code>ConsultaEventosService</code></td></tr>
+      <tr><td><code>Application/DTOs</code>, <code>Mapping</code>, <code>Options</code></td><td>Contrato webhook, mapeamento e opções de retry</td></tr>
+      <tr><td><code>Infrastructure/Persistence</code></td><td><code>ArquivoJsonStore</code> e repositórios em arquivo</td></tr>
+      <tr><td><code>Infrastructure/Crm</code></td><td><code>CrmHttpClient</code>, DTOs e store do mock</td></tr>
+      <tr><td><code>Infrastructure/Metrics</code></td><td>Coletor em memória</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 Fluxo ponta a ponta</h3>
+  <div class="flow">Sistema de Pedidos
+        │
+        ▼
+POST /api/webhooks/orders  (WebhooksController)
+        │
+        ▼
+EventoPedidoProcessor.ReceberAsync  (Core)
+   ├── Idempotência (eventId já sincronizado?)
+   ├── Persiste EventoIntegracao (data/events.json)
+   ├── PoliticaOrdenacaoEventos (occurredAt)
+   ├── ICrmClient.GarantirClienteAsync
+   ├── ICrmClient.UpsertPedidoAsync
+   └── Atualiza ProjecaoPedido (data/orders.json)
+        │
+        ├── sucesso → Status = Sincronizado
+        └── falha transitória → Status = Falhou + NextRetryAt
+                    │
+                    ▼
+         RetryBackgroundService (Api)
+                    │
+                    ▼
+         reprocessa / CartaMortua após MaxAttempts</div>
+
+  <h2 class="pagebreak">4. Modelagem de estado interno</h2>
+
+  <h3>4.1 EventoIntegracao</h3>
+  <p>Representa um evento recebido e seu ciclo de vida no pipeline de sincronização.</p>
+  <table>
+    <thead><tr><th>Campo</th><th>Descrição</th></tr></thead>
+    <tbody>
+      <tr><td><code>EventId</code></td><td>Identificador único do evento (chave de idempotência)</td></tr>
+      <tr><td><code>EventType</code></td><td><code>PedidoCriado</code>, <code>PedidoAtualizado</code>, <code>PedidoCancelado</code></td></tr>
+      <tr><td><code>OccurredAt</code></td><td>Instante de negócio usado na ordenação</td></tr>
+      <tr><td>OrderId, status, valor, moeda, cliente</td><td>Payload do pedido</td></tr>
+      <tr><td><code>Status</code></td><td>Status do <em>processamento</em> (não confundir com status do pedido)</td></tr>
+      <tr><td><code>AttemptCount</code> / <code>NextRetryAt</code> / <code>LastError</code></td><td>Controle de retry</td></tr>
+    </tbody>
+  </table>
+
+  <h4>StatusProcessamentoEvento</h4>
+  <table>
+    <thead><tr><th>Status</th><th>Significado</th></tr></thead>
+    <tbody>
+      <tr><td><code>Recebido</code></td><td>Evento persistido, ainda não processado com sucesso</td></tr>
+      <tr><td><code>Processando</code></td><td>Em processamento na tentativa atual</td></tr>
+      <tr><td><code>Sincronizado</code></td><td>Aplicado na projeção e no CRM</td></tr>
+      <tr><td><code>IgnoradoObsoleto</code></td><td>Evento mais antigo que o estado já conhecido</td></tr>
+      <tr><td><code>Falhou</code></td><td>Falha transitória; aguarda retry</td></tr>
+      <tr><td><code>CartaMortua</code></td><td>Esgotou tentativas; evento preservado para auditoria</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.2 ProjecaoPedido</h3>
+  <p>
+    Estado local consolidado do pedido. Guarda <code>LastOccurredAt</code> para decidir se um novo evento deve ser aplicado.
+    Fonte de <code>GET /api/orders/{orderId}</code>.
+  </p>
+  <table>
+    <thead><tr><th>StatusPedido</th><th>Origem típica</th></tr></thead>
+    <tbody>
+      <tr><td><code>Pendente</code></td><td><code>order.created</code> / status <code>pending</code></td></tr>
+      <tr><td><code>Confirmado</code></td><td><code>order.updated</code> / status <code>confirmed</code></td></tr>
+      <tr><td><code>Cancelado</code></td><td><code>order.canceled</code> (forçado pelo tipo de evento)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 Persistência</h3>
+  <ul>
+    <li><code>data/events.json</code> — eventos e status de processamento</li>
+    <li><code>data/orders.json</code> — projeções de pedido</li>
+    <li><code>data/crm/customers.json</code> e <code>orders.json</code> — store do CRM mock</li>
+  </ul>
+  <p>
+    Escrita via <code>ArquivoJsonStore&lt;T&gt;</code>: <code>SemaphoreSlim</code> + replace atômico.
+    Justificativa: simplicidade e aderência ao case, sem Docker/DB.
+  </p>
+
+  <h2>5. Lógica de negócio detalhada</h2>
+
+  <h3>5.1 Recepção do webhook</h3>
+  <ol>
+    <li><code>WebhooksController</code> recebe o JSON; se <code>eventId</code> estiver vazio, usa <code>X-Idempotency-Key</code>.</li>
+    <li><code>WebhookMapper</code> converte o contrato inglês em entidades de domínio.</li>
+    <li>Em <code>order.canceled</code>, o status vira <code>Cancelado</code> automaticamente.</li>
+    <li><code>EventoPedidoProcessor.ReceberAsync</code> executa o pipeline.</li>
+  </ol>
+
+  <h3>5.2 Idempotência</h3>
+  <div class="box">
+    Se já existe evento com o mesmo <code>eventId</code> em <code>Sincronizado</code> ou <code>IgnoradoObsoleto</code>,
+    a API responde <code>alreadyProcessed: true</code> e <strong>não</strong> chama o CRM novamente.
+    Cada evento de negócio novo (create → update → cancel) precisa de um <code>eventId</code> distinto.
+  </div>
+
+  <h3>5.3 Ordenação de eventos</h3>
+  <p>
+    <code>PoliticaOrdenacaoEventos</code> compara <code>occurredAt</code> com <code>ProjecaoPedido.LastOccurredAt</code>:
+    evento mais antigo → <code>IgnoradoObsoleto</code>; mais novo ou igual → aplica no CRM e na projeção.
+  </p>
+
+  <h3>5.4 Sincronização com o CRM</h3>
+  <ol>
+    <li><strong>GarantirClienteAsync</strong> — GET; se 404, POST; se existe, PUT.</li>
+    <li><strong>UpsertPedidoAsync</strong> — GET; se 404, POST; senão PUT. Status enviado em inglês (<code>pending</code>/<code>confirmed</code>/<code>canceled</code>).</li>
+  </ol>
+
+  <h3>5.5 Tratamento de falhas e retry</h3>
+  <p><strong>Polly (HttpClient):</strong> retries curtos para 429/5xx + circuit breaker (5 falhas → abre 15s).</p>
+  <p><strong>Aplicação:</strong> falha transitória → <code>Falhou</code> + backoff exponencial com jitter;
+    <code>RetryBackgroundService</code> reprocessa; após <code>MaxAttempts</code> → <code>CartaMortua</code>.</p>
+  <p>
+    CRM mock falha ~15% (<code>CrmMock:FailureRate</code>): 429, 500 ou timeout real
+    (delay padrão 12s &gt; timeout do client 10s).
+  </p>
+
+  <h2 class="pagebreak">6. Catálogo de endpoints</h2>
+
+  <h3>6.1 API de integração</h3>
+  <table>
+    <thead>
+      <tr><th>Método</th><th>Rota</th><th>Descrição</th><th>Respostas</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>POST</td>
+        <td><code>/api/webhooks/orders</code></td>
+        <td>Recebe evento do sistema de pedidos</td>
+        <td>200 (já processado / sucesso), 202 (aceito / retry), 400</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td><code>/api/events</code></td>
+        <td>Lista eventos e status</td>
+        <td>200</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td><code>/api/events/{eventId}</code></td>
+        <td>Detalhe do evento</td>
+        <td>200 / 404</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td><code>/api/orders/{orderId}</code></td>
+        <td>Projeção local do pedido</td>
+        <td>200 / 404</td>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td><code>/api/metrics</code></td>
+        <td>Contadores de sync / falha / retry / idempotência</td>
+        <td>200</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 Header opcional</h3>
+  <table>
+    <thead><tr><th>Header</th><th>Uso</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>X-Idempotency-Key</code></td>
+        <td>Usado como <code>eventId</code> somente se o body vier sem <code>eventId</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>6.3 Contrato do webhook</h3>
+  <pre>{
+  "eventId": "evt_01HXYZ",
+  "eventType": "order.created | order.updated | order.canceled",
+  "occurredAt": "2026-07-27T18:00:00Z",
+  "data": {
+    "orderId": "ord_123",
+    "status": "pending | confirmed | canceled",
+    "totalAmount": 150.90,
+    "currency": "BRL",
+    "customer": {
+      "externalId": "cust_456",
+      "name": "Ana Silva",
+      "email": "ana@email.com",
+      "document": "12345678901"
+    }
+  }
+}</pre>
+  <p class="muted">Em <code>order.canceled</code>, <code>data.status</code> é opcional/ignorado — o domínio força cancelado.</p>
+
+  <h3>6.4 CRM mock</h3>
+  <table>
+    <thead><tr><th>Método</th><th>Rota</th><th>Descrição</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td><code>/crm/customers/{externalId}</code></td><td>Busca cliente</td></tr>
+      <tr><td>POST</td><td><code>/crm/customers</code></td><td>Cria cliente</td></tr>
+      <tr><td>PUT</td><td><code>/crm/customers/{externalId}</code></td><td>Atualiza cliente</td></tr>
+      <tr><td>GET</td><td><code>/crm/orders/{orderId}</code></td><td>Busca pedido</td></tr>
+      <tr><td>POST</td><td><code>/crm/orders</code></td><td>Cria pedido</td></tr>
+      <tr><td>PUT</td><td><code>/crm/orders/{orderId}</code></td><td>Atualiza/cancela pedido</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. Configuração</h2>
+  <table>
+    <thead><tr><th>Chave</th><th>Uso</th></tr></thead>
+    <tbody>
+      <tr><td><code>Storage:DataPath</code></td><td>Pasta dos JSON (<code>data</code>)</td></tr>
+      <tr><td><code>Crm:BaseUrl</code></td><td>Base do CRM (dev: mesmo host)</td></tr>
+      <tr><td><code>CrmMock:FailureRate</code></td><td>Taxa de falha do mock (~0.15)</td></tr>
+      <tr><td><code>CrmMock:TimeoutDelaySeconds</code></td><td>Delay do timeout simulado (padrão 12)</td></tr>
+      <tr><td><code>Retry:MaxAttempts</code></td><td>Tentativas antes de carta morta</td></tr>
+      <tr><td><code>Retry:BaseDelaySeconds</code> / <code>MaxDelaySeconds</code></td><td>Backoff</td></tr>
+      <tr><td><code>Retry:PollIntervalSeconds</code></td><td>Intervalo do worker</td></tr>
+    </tbody>
+  </table>
+
+  <h2>8. Observabilidade</h2>
+  <ul>
+    <li>Logs estruturados (<code>ILogger</code>) em sucessos, falhas, retries e idempotência.</li>
+    <li>Métricas em <code>GET /api/metrics</code>.</li>
+    <li>Swagger em <code>/swagger</code> (inclui mock CRM).</li>
+  </ul>
+
+  <h2>9. Testes</h2>
+  <ul>
+    <li>mesmo <code>eventId</code> duas vezes → um único efeito;</li>
+    <li>evento antigo após um mais novo → estado = mais recente;</li>
+    <li>falha transitória → retry e sync;</li>
+    <li><code>order.canceled</code> força status cancelado.</li>
+  </ul>
+  <pre>dotnet test</pre>
+
+  <h2>10. Como executar</h2>
+  <pre>cd CaseIntegracao
+dotnet restore
+dotnet build
+dotnet test
+dotnet run --project CaseIntegracao.Api</pre>
+  <ul>
+    <li>API: <code>http://localhost:5080</code></li>
+    <li>Swagger: <code>http://localhost:5080/swagger</code></li>
+    <li>Postman: <code>postman/CaseIntegracao.postman_collection.json</code></li>
+    <li>.http: <code>CaseIntegracao.Api/CaseIntegracao.Api.http</code></li>
+  </ul>
+
+  <h2 class="pagebreak">11. Decisões e trade-offs</h2>
+  <table>
+    <thead><tr><th>Decisão</th><th>Por quê</th><th>Trade-off</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Api + Core com pastas Domain/Application/Infrastructure</td>
+        <td>Case enxuto + camadas legíveis na Solution Explorer</td>
+        <td>Menos isolamento físico que vários .csproj</td>
+      </tr>
+      <tr>
+        <td>Arquivo JSON</td>
+        <td>Zero dependência externa</td>
+        <td>Concorrência limitada</td>
+      </tr>
+      <tr>
+        <td>Sem fila externa</td>
+        <td>Case não exige; sync + worker bastam</td>
+        <td>Menos desacoplamento sob carga</td>
+      </tr>
+      <tr>
+        <td>CRM mock no mesmo processo</td>
+        <td>Demo/Swagger/testes locais fáceis</td>
+        <td>Não isola rede real</td>
+      </tr>
+      <tr>
+        <td>Polly + retry de aplicação</td>
+        <td>Retries curtos na borda + DLQ de negócio</td>
+        <td>Duas camadas de resiliência</td>
+      </tr>
+      <tr>
+        <td>JSON do webhook em inglês; código em PT-BR</td>
+        <td>Contrato de integração + domínio legível</td>
+        <td>Dois idiomas no projeto</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>12. Escala com fila (reflexão)</h2>
+  <p>
+    Em produção, o webhook validaria o payload, gravaria um inbox e publicaria em fila
+    (SQS, RabbitMQ ou Azure Service Bus). Workers competiriam com visibility timeout e DLQ.
+    Idempotência e projeção ficariam em store compartilhado (banco), permitindo múltiplas instâncias.
+  </p>
+
+  <h2>13. O que mudaria com mais tempo</h2>
+  <ul>
+    <li>Banco (ou outbox/inbox) em vez de arquivo</li>
+    <li>Testes de integração com <code>WebApplicationFactory</code></li>
+    <li>Assinatura HMAC no webhook</li>
+    <li>OpenTelemetry / tracing</li>
+    <li>Exemplos OpenAPI por <code>eventType</code></li>
+  </ul>
+
+  <h2>14. Mapa de pastas</h2>
+  <pre>CaseIntegracao/
+├── CaseIntegracao.Api/      Controllers, Workers, Swagger, Program
+├── CaseIntegracao.Core/
+│   ├── Domain/              Entities, Enums, Interfaces, PoliticaOrdenacaoEventos
+│   ├── Application/         Processor, DTOs, Mapping, Options
+│   ├── Infrastructure/      Persistence, Crm, Metrics
+│   └── DependencyInjection.cs
+├── CaseIntegracao.Tests/    Testes xUnit
+├── postman/                 Collection Postman
+├── docs/                    Esta documentação (PDF)
+└── README.md                Guia de entrega do case</pre>
+
+  <p class="muted" style="margin-top: 28px;">
+    Fim do documento técnico — Case Integração Pedidos → CRM (Api + Core).
+  </p>
+
+</body>
+</html>

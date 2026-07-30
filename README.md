@@ -120,17 +120,21 @@ Exemplos HTTP: `[CaseIntegracao.Api/CaseIntegracao.Api.http](CaseIntegracao.Api/
 
 ## Decisões de arquitetura (e por quê)
 
-### Organização (Api + Core)
+### Organização (Api + Core com camadas internas)
 
 
 | Projeto                | Responsabilidade                                                                 |
 | ---------------------- | -------------------------------------------------------------------------------- |
-| `CaseIntegracao.Core`  | Domínio, casos de uso, persistência JSON, `CrmHttpClient`, Polly e métricas     |
+| `CaseIntegracao.Core`  | Domínio, aplicação e infraestrutura em pastas internas (`Domain` / `Application` / `Infrastructure`) |
 | `CaseIntegracao.Api`   | Controllers, Swagger, CRM mock, `RetryBackgroundService`                         |
 | `CaseIntegracao.Tests` | Testes de idempotência, ordenação e retry                                        |
 
+Dentro do Core:
+- **Domain** — entidades, enums, portas e `PoliticaOrdenacaoEventos`
+- **Application** — `EventoPedidoProcessor`, DTOs, mapper, opções de retry
+- **Infrastructure** — arquivos JSON, `CrmHttpClient`, Polly/métricas
 
-Dois projetos deixam o case mais enxuto, ainda com separação entre HTTP e regras/infra.
+Dois projetos na solution; camadas claras nas pastas do Core.
 
 ### Persistência em arquivo
 
